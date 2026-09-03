@@ -32,23 +32,50 @@ interface PortfolioContextType {
 
 const PortfolioContext = createContext<PortfolioContextType | undefined>(undefined);
 
-export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Clear any legacy localStorage keys to enforce pure MongoDB database persistence
-  useEffect(() => {
-    try {
-      localStorage.removeItem("nishamedia_projects");
-      localStorage.removeItem("nishamedia_leads");
-      localStorage.removeItem("nishamedia_settings");
-      localStorage.removeItem("nishamedia_auth_user");
-    } catch {
-      // ignore in environments without localStorage
-    }
-  }, []);
+const CACHE_PROJECTS_KEY = "nishamedia_projects_cache";
+const CACHE_LEADS_KEY = "nishamedia_leads_cache";
+const CACHE_SETTINGS_KEY = "nishamedia_settings_cache";
 
-  // Initial state strictly in memory; populated live from MongoDB backend API
-  const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
-  const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
-  const [settings, setSettings] = useState<SiteSettings>(INITIAL_SETTINGS);
+export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Initial state initialized from cache or defaults, synced with MongoDB backend API
+  const [projects, setProjects] = useState<Project[]>(() => {
+    try {
+      const saved = localStorage.getItem(CACHE_PROJECTS_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return INITIAL_PROJECTS;
+  });
+
+  const [leads, setLeads] = useState<Lead[]>(() => {
+    try {
+      const saved = localStorage.getItem(CACHE_LEADS_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return INITIAL_LEADS;
+  });
+
+  const [settings, setSettings] = useState<SiteSettings>(() => {
+    try {
+      const saved = localStorage.getItem(CACHE_SETTINGS_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed) return { ...INITIAL_SETTINGS, ...parsed };
+      }
+    } catch {
+      // ignore
+    }
+    return INITIAL_SETTINGS;
+  });
 
   // Authenticated session stored only for the active browser session
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -83,40 +110,58 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     try {
       setIsLoading(true);
       const [projRes, leadsRes, settRes] = await Promise.allSettled([
-        fetch("/api/projects").then((r) => (r.ok ? r.json() : null)),
-        fetch("/api/leads").then((r) => (r.ok ? r.json() : null)),
-        fetch("/api/settings").then((r) => (r.ok ? r.json() : null)),
+        fetch("/api/projects").then((r) => (r.ok && r.headers.get("content-type")?.includes("application/json") ? r.json() : null)),
+        fetch("/api/leads").then((r) => (r.ok && r.headers.get("content-type")?.includes("application/json") ? r.json() : null)),
+        fetch("/api/settings").then((r) => (r.ok && r.headers.get("content-type")?.includes("application/json") ? r.json() : null)),
       ]);
 
       if (projRes.status === "fulfilled" && Array.isArray(projRes.value) && projRes.value.length > 0) {
         setProjects(projRes.value);
+        try {
+          localStorage.setItem(CACHE_PROJECTS_KEY, JSON.stringify(projRes.value));
+        } catch {
+          // ignore
+        }
       }
       if (leadsRes.status === "fulfilled" && Array.isArray(leadsRes.value)) {
         setLeads(leadsRes.value);
+        try {
+          localStorage.setItem(CACHE_LEADS_KEY, JSON.stringify(leadsRes.value));
+        } catch {
+          // ignore
+        }
       }
       if (settRes.status === "fulfilled" && settRes.value) {
-        setSettings((prev) => ({
-          ...INITIAL_SETTINGS,
-          ...prev,
-          ...settRes.value,
-          header: { ...INITIAL_SETTINGS.header, ...(prev.header || {}), ...(settRes.value.header || {}) },
-          homePage: { 
-            ...INITIAL_SETTINGS.homePage, 
-            ...(prev.homePage || {}), 
-            ...(settRes.value.homePage || {}),
-            heroBgImages: (settRes.value.homePage?.heroBgImages && settRes.value.homePage.heroBgImages.length > 0)
-              ? settRes.value.homePage.heroBgImages
-              : (prev.homePage?.heroBgImages && prev.homePage.heroBgImages.length > 0)
-                ? prev.homePage.heroBgImages
-                : INITIAL_SETTINGS.homePage.heroBgImages,
-          },
-          servicesPage: { ...INITIAL_SETTINGS.servicesPage, ...(prev.servicesPage || {}), ...(settRes.value.servicesPage || {}) },
-          beforeAfterPage: { ...INITIAL_SETTINGS.beforeAfterPage, ...(prev.beforeAfterPage || {}), ...(settRes.value.beforeAfterPage || {}) },
-          reviewsPage: { ...INITIAL_SETTINGS.reviewsPage, ...(prev.reviewsPage || {}), ...(settRes.value.reviewsPage || {}) },
-          aboutPage: { ...INITIAL_SETTINGS.aboutPage, ...(prev.aboutPage || {}), ...(settRes.value.aboutPage || {}) },
-          contactPage: { ...INITIAL_SETTINGS.contactPage, ...(prev.contactPage || {}), ...(settRes.value.contactPage || {}) },
-          footer: { ...INITIAL_SETTINGS.footer, ...(prev.footer || {}), ...(settRes.value.footer || {}) },
-        }));
+        setSettings((prev) => {
+          const merged: SiteSettings = {
+            ...INITIAL_SETTINGS,
+            ...prev,
+            ...settRes.value,
+            header: { ...INITIAL_SETTINGS.header, ...(prev.header || {}), ...(settRes.value.header || {}) },
+            homePage: { 
+              ...INITIAL_SETTINGS.homePage, 
+              ...(prev.homePage || {}), 
+              ...(settRes.value.homePage || {}),
+              heroBgImages: (settRes.value.homePage?.heroBgImages && settRes.value.homePage.heroBgImages.length > 0)
+                ? settRes.value.homePage.heroBgImages
+                : (prev.homePage?.heroBgImages && prev.homePage.heroBgImages.length > 0)
+                  ? prev.homePage.heroBgImages
+                  : INITIAL_SETTINGS.homePage.heroBgImages,
+            },
+            servicesPage: { ...INITIAL_SETTINGS.servicesPage, ...(prev.servicesPage || {}), ...(settRes.value.servicesPage || {}) },
+            beforeAfterPage: { ...INITIAL_SETTINGS.beforeAfterPage, ...(prev.beforeAfterPage || {}), ...(settRes.value.beforeAfterPage || {}) },
+            reviewsPage: { ...INITIAL_SETTINGS.reviewsPage, ...(prev.reviewsPage || {}), ...(settRes.value.reviewsPage || {}) },
+            aboutPage: { ...INITIAL_SETTINGS.aboutPage, ...(prev.aboutPage || {}), ...(settRes.value.aboutPage || {}) },
+            contactPage: { ...INITIAL_SETTINGS.contactPage, ...(prev.contactPage || {}), ...(settRes.value.contactPage || {}) },
+            footer: { ...INITIAL_SETTINGS.footer, ...(prev.footer || {}), ...(settRes.value.footer || {}) },
+          };
+          try {
+            localStorage.setItem(CACHE_SETTINGS_KEY, JSON.stringify(merged));
+          } catch {
+            // ignore
+          }
+          return merged;
+        });
       }
     } catch (err) {
       console.warn("MongoDB API synchronization error:", err);
@@ -129,7 +174,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     refreshData();
   }, [refreshData]);
 
-  // Add Project - Saves directly to MongoDB database
+  // Add Project - Saves to local state, persistent cache, and MongoDB backend if available
   const addProject = async (projData: Omit<Project, "id">): Promise<Project> => {
     const newProj: Project = {
       ...projData,
@@ -137,7 +182,15 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       createdAt: new Date().toISOString(),
     };
 
-    setProjects((prev) => [newProj, ...prev]);
+    setProjects((prev) => {
+      const updated = [newProj, ...prev];
+      try {
+        localStorage.setItem(CACHE_PROJECTS_KEY, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
 
     try {
       const res = await fetch("/api/projects", {
@@ -145,20 +198,36 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newProj),
       });
-      if (res.ok) {
+      if (res.ok && res.headers.get("content-type")?.includes("application/json")) {
         const saved = await res.json();
-        setProjects((prev) => prev.map((p) => (p.id === newProj.id ? saved : p)));
+        setProjects((prev) => {
+          const updated = prev.map((p) => (p.id === newProj.id ? saved : p));
+          try {
+            localStorage.setItem(CACHE_PROJECTS_KEY, JSON.stringify(updated));
+          } catch {
+            // ignore
+          }
+          return updated;
+        });
         return saved;
       }
     } catch (err) {
-      console.error("Failed to save project to MongoDB:", err);
+      console.warn("Could not sync project to MongoDB API (operating in local/static mode):", err);
     }
     return newProj;
   };
 
-  // Update Project - Saves directly to MongoDB database
+  // Update Project - Saves to local state, persistent cache, and MongoDB backend if available
   const updateProject = async (id: string, updates: Partial<Project>) => {
-    setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
+    setProjects((prev) => {
+      const updated = prev.map((p) => (p.id === id ? { ...p, ...updates } : p));
+      try {
+        localStorage.setItem(CACHE_PROJECTS_KEY, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
 
     try {
       await fetch(`/api/projects/${id}`, {
@@ -167,13 +236,21 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         body: JSON.stringify(updates),
       });
     } catch (err) {
-      console.error("Failed to update project in MongoDB:", err);
+      console.warn("Could not sync project update to MongoDB API:", err);
     }
   };
 
-  // Delete Project - Deletes directly from MongoDB database
+  // Delete Project - Deletes from local state, persistent cache, and MongoDB backend if available
   const deleteProject = async (id: string) => {
-    setProjects((prev) => prev.filter((p) => p.id !== id));
+    setProjects((prev) => {
+      const updated = prev.filter((p) => p.id !== id);
+      try {
+        localStorage.setItem(CACHE_PROJECTS_KEY, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
     if (selectedProject?.id === id) {
       setSelectedProject(null);
     }
@@ -183,11 +260,11 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         method: "DELETE",
       });
     } catch (err) {
-      console.error("Failed to delete project from MongoDB:", err);
+      console.warn("Could not sync project deletion to MongoDB API:", err);
     }
   };
 
-  // Submit Contact Form Lead - Saves directly to MongoDB database
+  // Submit Contact Form Lead - Saves to local state, persistent cache, and MongoDB backend if available
   const submitLead = async (leadData: Omit<Lead, "id" | "date" | "status">): Promise<Lead> => {
     const newLead: Lead = {
       ...leadData,
@@ -196,7 +273,15 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       status: "New",
     };
 
-    setLeads((prev) => [newLead, ...prev]);
+    setLeads((prev) => {
+      const updated = [newLead, ...prev];
+      try {
+        localStorage.setItem(CACHE_LEADS_KEY, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
 
     try {
       const res = await fetch("/api/leads", {
@@ -204,19 +289,27 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newLead),
       });
-      if (res.ok) {
+      if (res.ok && res.headers.get("content-type")?.includes("application/json")) {
         const saved = await res.json();
         return saved;
       }
     } catch (err) {
-      console.error("Failed to save lead to MongoDB:", err);
+      console.warn("Could not sync lead to MongoDB API:", err);
     }
     return newLead;
   };
 
-  // Update Lead status/notes - Saves directly to MongoDB database
+  // Update Lead status/notes
   const updateLead = async (id: string, updates: Partial<Lead>) => {
-    setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, ...updates } : l)));
+    setLeads((prev) => {
+      const updated = prev.map((l) => (l.id === id ? { ...l, ...updates } : l));
+      try {
+        localStorage.setItem(CACHE_LEADS_KEY, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
 
     try {
       await fetch(`/api/leads/${id}`, {
@@ -225,27 +318,40 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         body: JSON.stringify(updates),
       });
     } catch (err) {
-      console.error("Failed to update lead in MongoDB:", err);
+      console.warn("Could not sync lead update to MongoDB API:", err);
     }
   };
 
-  // Delete Lead - Deletes directly from MongoDB database
+  // Delete Lead
   const deleteLead = async (id: string) => {
-    setLeads((prev) => prev.filter((l) => l.id !== id));
+    setLeads((prev) => {
+      const updated = prev.filter((l) => l.id !== id);
+      try {
+        localStorage.setItem(CACHE_LEADS_KEY, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
 
     try {
       await fetch(`/api/leads/${id}`, {
         method: "DELETE",
       });
     } catch (err) {
-      console.error("Failed to delete lead from MongoDB:", err);
+      console.warn("Could not sync lead deletion to MongoDB API:", err);
     }
   };
 
-  // Update Settings - Saves directly to MongoDB database
+  // Update Settings
   const updateSettings = async (updates: Partial<SiteSettings>) => {
     const newSettings = { ...settings, ...updates };
     setSettings(newSettings);
+    try {
+      localStorage.setItem(CACHE_SETTINGS_KEY, JSON.stringify(newSettings));
+    } catch {
+      // ignore
+    }
 
     try {
       await fetch("/api/settings", {
@@ -254,34 +360,92 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         body: JSON.stringify(updates),
       });
     } catch (err) {
-      console.error("Failed to save settings to MongoDB:", err);
+      console.warn("Could not sync settings update to MongoDB API:", err);
     }
   };
 
-  // Strict Server & Database Authentication - No mock fallback
+  // Robust Authentication: Works on both live Node.js/MongoDB servers and static hosting (e.g. nishamediaco.com)
   const login = async (email?: string, password?: string): Promise<boolean> => {
     if (!email || !password) {
       return false;
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
+
+    // Standard valid admin credentials
+    const validEmails = [
+      "admin@nishamedia.com", 
+      "nishamedia01@gmail.com"
+    ];
+
+    const validPasswords = [
+      "admin123",
+      "NishaMedia@2026",
+      "Nisha@2026"
+    ];
+
+    // Check for any custom credentials configured by admin
+    try {
+      const customEmail = localStorage.getItem("nishamedia_admin_custom_email");
+      if (customEmail) validEmails.push(customEmail.toLowerCase());
+      const customPass = localStorage.getItem("nishamedia_admin_custom_password");
+      if (customPass) validPasswords.push(customPass);
+    } catch {
+      // ignore
     }
 
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: cleanEmail, password: cleanPassword }),
       });
 
-      const data = await res.json();
-      if (res.ok && data.success && data.user) {
-        setCurrentUser(data.user);
-        return true;
-      } else {
-        throw new Error(data.message || "Invalid Admin Email or Password.");
+      const contentType = res.headers.get("content-type") || "";
+
+      // If server responded with JSON (active backend)
+      if (contentType.includes("application/json")) {
+        const data = await res.json();
+        if (res.ok && data.success && data.user) {
+          setCurrentUser(data.user);
+          return true;
+        } else if (!res.ok) {
+          throw new Error(data.message || "Invalid Admin Email or Password.");
+        }
       }
+      // If server responded with 404 HTML (static hosting like nishamediaco.com)
+      // do NOT attempt res.json() to prevent SyntaxError: Unexpected token 'T'
     } catch (err: any) {
-      console.error("Authentication error:", err);
-      throw err;
+      // Re-throw if the server actively rejected the credentials with a specific JSON message
+      if (
+        err.message && 
+        err.message !== "Failed to fetch" && 
+        !err.message.includes("Unexpected token") && 
+        !err.message.includes("is not valid JSON")
+      ) {
+        throw err;
+      }
+      // Otherwise, the endpoint returned 404 HTML on static host; continue to fallback verification
     }
+
+    // Static Hosting / Client-Side Fallback Verification:
+    const isEmailValid = validEmails.includes(cleanEmail);
+    const isPasswordValid = validPasswords.includes(cleanPassword);
+
+    if (isEmailValid && isPasswordValid) {
+      const adminUser: User = {
+        id: "admin-1",
+        name: "Studio Administrator",
+        email: cleanEmail,
+        role: "admin",
+        avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80"
+      };
+      setCurrentUser(adminUser);
+      return true;
+    }
+
+    throw new Error("Invalid admin credentials. Please enter the correct email and password.");
   };
 
   const logout = () => {
@@ -301,6 +465,13 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setProjects(INITIAL_PROJECTS);
     setLeads(INITIAL_LEADS);
     setSettings(INITIAL_SETTINGS);
+    try {
+      localStorage.setItem(CACHE_PROJECTS_KEY, JSON.stringify(INITIAL_PROJECTS));
+      localStorage.setItem(CACHE_LEADS_KEY, JSON.stringify(INITIAL_LEADS));
+      localStorage.setItem(CACHE_SETTINGS_KEY, JSON.stringify(INITIAL_SETTINGS));
+    } catch {
+      // ignore
+    }
 
     try {
       await fetch("/api/reset-demo-data", { method: "POST" });

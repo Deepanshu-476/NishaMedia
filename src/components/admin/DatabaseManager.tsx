@@ -113,6 +113,10 @@ export const DatabaseManager: React.FC = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ uri })
       });
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error("Backend server API route not found on this host. If hosting statically, please connect the Node.js backend.");
+      }
       const data = await res.json();
 
       if (data.success) {
@@ -143,6 +147,10 @@ export const DatabaseManager: React.FC = () => {
       setIsSyncing(true);
       setActionMessage(null);
       const res = await fetch("/api/db/sync", { method: "POST" });
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error("Backend server API route not found on this host.");
+      }
       const data = await res.json();
       if (data.success) {
         setActionMessage({ 
