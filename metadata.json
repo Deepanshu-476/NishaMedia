@@ -1,0 +1,6 @@
+{
+  "name": "Nisha Media - Video & Graphics Portfolio & CMS",
+  "description": "Professional video editing and graphic design portfolio with a headless CMS admin panel for instant project uploads, lead inquiries management, and light/dark mode.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
