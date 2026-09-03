@@ -33,49 +33,31 @@ interface PortfolioContextType {
 const PortfolioContext = createContext<PortfolioContextType | undefined>(undefined);
 
 export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [projects, setProjects] = useState<Project[]>(() => {
-    const saved = localStorage.getItem("nishamedia_projects");
-    return saved ? JSON.parse(saved) : INITIAL_PROJECTS;
-  });
-
-  const [leads, setLeads] = useState<Lead[]>(() => {
-    const saved = localStorage.getItem("nishamedia_leads");
-    return saved ? JSON.parse(saved) : INITIAL_LEADS;
-  });
-
-  const [settings, setSettings] = useState<SiteSettings>(() => {
-    const saved = localStorage.getItem("nishamedia_settings");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return {
-          ...INITIAL_SETTINGS,
-          ...parsed,
-          header: { ...INITIAL_SETTINGS.header, ...(parsed.header || {}) },
-          homePage: { 
-            ...INITIAL_SETTINGS.homePage, 
-            ...(parsed.homePage || {}),
-            heroBgImages: (parsed.homePage?.heroBgImages && parsed.homePage.heroBgImages.length > 0)
-              ? parsed.homePage.heroBgImages
-              : INITIAL_SETTINGS.homePage.heroBgImages,
-          },
-          servicesPage: { ...INITIAL_SETTINGS.servicesPage, ...(parsed.servicesPage || {}) },
-          beforeAfterPage: { ...INITIAL_SETTINGS.beforeAfterPage, ...(parsed.beforeAfterPage || {}) },
-          reviewsPage: { ...INITIAL_SETTINGS.reviewsPage, ...(parsed.reviewsPage || {}) },
-          aboutPage: { ...INITIAL_SETTINGS.aboutPage, ...(parsed.aboutPage || {}) },
-          contactPage: { ...INITIAL_SETTINGS.contactPage, ...(parsed.contactPage || {}) },
-          footer: { ...INITIAL_SETTINGS.footer, ...(parsed.footer || {}) },
-        };
-      } catch {
-        return INITIAL_SETTINGS;
-      }
+  // Clear any legacy localStorage keys to enforce pure MongoDB database persistence
+  useEffect(() => {
+    try {
+      localStorage.removeItem("nishamedia_projects");
+      localStorage.removeItem("nishamedia_leads");
+      localStorage.removeItem("nishamedia_settings");
+      localStorage.removeItem("nishamedia_auth_user");
+    } catch {
+      // ignore in environments without localStorage
     }
-    return INITIAL_SETTINGS;
-  });
+  }, []);
 
+  // Initial state strictly in memory; populated live from MongoDB backend API
+  const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
+  const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
+  const [settings, setSettings] = useState<SiteSettings>(INITIAL_SETTINGS);
+
+  // Authenticated session stored only for the active browser session
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem("nishamedia_auth_user");
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const session = sessionStorage.getItem("nishamedia_admin_session");
+      return session ? JSON.parse(session) : null;
+    } catch {
+      return null;
+    }
   });
 
   const [isLoading, setIsLoading] = useState(false);
@@ -83,28 +65,20 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
-  // Sync to local storage
+  // Synchronize active session with sessionStorage
   useEffect(() => {
-    localStorage.setItem("nishamedia_projects", JSON.stringify(projects));
-  }, [projects]);
-
-  useEffect(() => {
-    localStorage.setItem("nishamedia_leads", JSON.stringify(leads));
-  }, [leads]);
-
-  useEffect(() => {
-    localStorage.setItem("nishamedia_settings", JSON.stringify(settings));
-  }, [settings]);
-
-  useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem("nishamedia_auth_user", JSON.stringify(currentUser));
-    } else {
-      localStorage.removeItem("nishamedia_auth_user");
+    try {
+      if (currentUser) {
+        sessionStorage.setItem("nishamedia_admin_session", JSON.stringify(currentUser));
+      } else {
+        sessionStorage.removeItem("nishamedia_admin_session");
+      }
+    } catch {
+      // ignore
     }
   }, [currentUser]);
 
-  // Fetch initial data from Express backend API
+  // Fetch live database state from MongoDB backend API
   const refreshData = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -117,7 +91,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (projRes.status === "fulfilled" && Array.isArray(projRes.value) && projRes.value.length > 0) {
         setProjects(projRes.value);
       }
-      if (leadsRes.status === "fulfilled" && Array.isArray(leadsRes.value) && leadsRes.value.length > 0) {
+      if (leadsRes.status === "fulfilled" && Array.isArray(leadsRes.value)) {
         setLeads(leadsRes.value);
       }
       if (settRes.status === "fulfilled" && settRes.value) {
@@ -145,7 +119,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }));
       }
     } catch (err) {
-      console.warn("Backend API sync fallback, using local state:", err);
+      console.warn("MongoDB API synchronization error:", err);
     } finally {
       setIsLoading(false);
     }
@@ -155,7 +129,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     refreshData();
   }, [refreshData]);
 
-  // Add Project
+  // Add Project - Saves directly to MongoDB database
   const addProject = async (projData: Omit<Project, "id">): Promise<Project> => {
     const newProj: Project = {
       ...projData,
@@ -163,10 +137,8 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       createdAt: new Date().toISOString(),
     };
 
-    // Optimistic UI update
     setProjects((prev) => [newProj, ...prev]);
 
-    // Backend sync
     try {
       const res = await fetch("/api/projects", {
         method: "POST",
@@ -179,12 +151,12 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return saved;
       }
     } catch (err) {
-      console.warn("Failed to POST project to API, saved locally:", err);
+      console.error("Failed to save project to MongoDB:", err);
     }
     return newProj;
   };
 
-  // Update Project
+  // Update Project - Saves directly to MongoDB database
   const updateProject = async (id: string, updates: Partial<Project>) => {
     setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
 
@@ -195,11 +167,11 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         body: JSON.stringify(updates),
       });
     } catch (err) {
-      console.warn("Failed to PUT project to API:", err);
+      console.error("Failed to update project in MongoDB:", err);
     }
   };
 
-  // Delete Project
+  // Delete Project - Deletes directly from MongoDB database
   const deleteProject = async (id: string) => {
     setProjects((prev) => prev.filter((p) => p.id !== id));
     if (selectedProject?.id === id) {
@@ -211,11 +183,11 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         method: "DELETE",
       });
     } catch (err) {
-      console.warn("Failed to DELETE project from API:", err);
+      console.error("Failed to delete project from MongoDB:", err);
     }
   };
 
-  // Submit Contact Form Lead
+  // Submit Contact Form Lead - Saves directly to MongoDB database
   const submitLead = async (leadData: Omit<Lead, "id" | "date" | "status">): Promise<Lead> => {
     const newLead: Lead = {
       ...leadData,
@@ -237,12 +209,12 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return saved;
       }
     } catch (err) {
-      console.warn("Failed to POST lead to API:", err);
+      console.error("Failed to save lead to MongoDB:", err);
     }
     return newLead;
   };
 
-  // Update Lead status/notes
+  // Update Lead status/notes - Saves directly to MongoDB database
   const updateLead = async (id: string, updates: Partial<Lead>) => {
     setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, ...updates } : l)));
 
@@ -253,11 +225,11 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         body: JSON.stringify(updates),
       });
     } catch (err) {
-      console.warn("Failed to PUT lead to API:", err);
+      console.error("Failed to update lead in MongoDB:", err);
     }
   };
 
-  // Delete Lead
+  // Delete Lead - Deletes directly from MongoDB database
   const deleteLead = async (id: string) => {
     setLeads((prev) => prev.filter((l) => l.id !== id));
 
@@ -266,11 +238,11 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         method: "DELETE",
       });
     } catch (err) {
-      console.warn("Failed to DELETE lead from API:", err);
+      console.error("Failed to delete lead from MongoDB:", err);
     }
   };
 
-  // Update Settings
+  // Update Settings - Saves directly to MongoDB database
   const updateSettings = async (updates: Partial<SiteSettings>) => {
     const newSettings = { ...settings, ...updates };
     setSettings(newSettings);
@@ -282,40 +254,46 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         body: JSON.stringify(updates),
       });
     } catch (err) {
-      console.warn("Failed to update settings in API:", err);
+      console.error("Failed to save settings to MongoDB:", err);
     }
   };
 
-  // Auth Login
+  // Strict Server & Database Authentication - No mock fallback
   const login = async (email?: string, password?: string): Promise<boolean> => {
+    if (!email || !password) {
+      return false;
+    }
+
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      if (res.ok) {
-        const data = await res.json();
+
+      const data = await res.json();
+      if (res.ok && data.success && data.user) {
         setCurrentUser(data.user);
         return true;
+      } else {
+        throw new Error(data.message || "Invalid Admin Email or Password.");
       }
-    } catch (err) {
-      console.warn("Auth endpoint fallback, logging in locally:", err);
+    } catch (err: any) {
+      console.error("Authentication error:", err);
+      throw err;
     }
-
-    // Default admin mock
-    setCurrentUser({
-      id: "admin-1",
-      name: "Nisha (Studio Admin)",
-      email: email || "admin@nishamedia.com",
-      role: "admin",
-      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
-    });
-    return true;
   };
 
   const logout = () => {
     setCurrentUser(null);
+    try {
+      sessionStorage.removeItem("nishamedia_admin_session");
+      if (window.location.hash === "#admin" || window.location.hash === "admin") {
+        window.location.hash = "home";
+      }
+    } catch {
+      // ignore
+    }
   };
 
   // Reset to Demo Data

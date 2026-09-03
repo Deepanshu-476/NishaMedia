@@ -166,21 +166,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             </a>
           )}
 
-          {/* Admin CMS Button */}
-          <button
-            onClick={onOpenAdmin}
-            id="open-admin-cms-btn"
-            className="relative flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-bold rounded-xl bg-neutral-900 text-white dark:bg-white dark:text-neutral-950 hover:opacity-90 transition-all shadow-sm"
-          >
-            <LayoutDashboard className="w-4 h-4 text-amber-400 dark:text-amber-600" />
-            <span>{adminLabel}</span>
-            {newLeadsCount > 0 && (
-              <span className="w-4 h-4 flex items-center justify-center text-[10px] font-bold bg-rose-500 text-white rounded-full">
-                {newLeadsCount}
-              </span>
-            )}
-          </button>
-
           {/* Mobile Menu Trigger */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -225,16 +210,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>Chat on {whatsappLabel}</span>
               </a>
             )}
-            <button
-              onClick={() => {
-                setMobileMenuOpen(false);
-                onOpenAdmin();
-              }}
-              className="w-full py-2.5 px-4 text-center text-xs font-bold rounded-xl bg-neutral-900 text-white dark:bg-white dark:text-neutral-950 flex items-center justify-center gap-2"
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              <span>Open {adminLabel} ({newLeadsCount} New Leads)</span>
-            </button>
           </div>
         </div>
       )}

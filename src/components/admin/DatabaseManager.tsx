@@ -15,7 +15,9 @@ import {
   Lock,
   Layers,
   HelpCircle,
-  Clock
+  Clock,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import { usePortfolio } from "../../context/PortfolioContext";
 
@@ -43,6 +45,7 @@ export const DatabaseManager: React.FC = () => {
     "mongodb+srv://deepnalhera476_db_user:<db_password>@cluster0.7egptui.mongodb.net/?editflow_db=Cluster0"
   );
   const [passwordOnly, setPasswordOnly] = useState("");
+  const [showDbPassword, setShowDbPassword] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [actionMessage, setActionMessage] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
@@ -306,12 +309,21 @@ export const DatabaseManager: React.FC = () => {
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
               <input
-                type="password"
+                type={showDbPassword ? "text" : "password"}
                 placeholder="Enter your MongoDB Database User Password here..."
                 value={passwordOnly}
                 onChange={(e) => setPasswordOnly(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-amber-300 dark:border-amber-700 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
+                className="w-full pl-4 pr-10 py-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-amber-300 dark:border-amber-700 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
               />
+              <button
+                type="button"
+                onClick={() => setShowDbPassword(!showDbPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 focus:outline-none"
+                title={showDbPassword ? "Hide password" : "Show password"}
+                aria-label={showDbPassword ? "Hide password" : "Show password"}
+              >
+                {showDbPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
             <button
               type="button"

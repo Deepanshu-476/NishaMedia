@@ -384,35 +384,95 @@ app.delete("/api/leads/:id", async (req, res) => {
 });
 
 
-// 5. Auth Demo API (admin login)
+// 5. Proper Admin Authentication API
 app.post("/api/auth/login", (req, res) => {
   const { email, password } = req.body;
-  // Demo admin credentials or instant access
-  if ((email === "admin@nishamedia.com" && password === "admin123") || email === "admin" || email === "nishamedia01@gmail.com") {
-    return res.json({
-      success: true,
-      user: {
-        id: "admin-1",
-        name: "Nisha Media (Admin)",
-        email: email || "admin@nishamedia.com",
-        role: "admin",
-        avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80"
-      },
-      token: "demo-jwt-token-nisha-media-cms"
+
+  if (!email || !password) {
+    return res.status(400).json({ 
+      success: false, 
+      message: "Please enter both your Admin Email and Password." 
     });
   }
-  // Allow flexible demo login
+
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanPassword = password.trim();
+
+  // Allowed default or configured admin credentials
+  const defaultEmails = [
+    "admin@nishamedia.com", 
+    "nishamedia01@gmail.com", 
+    (process.env.ADMIN_EMAIL || "").toLowerCase()
+  ].filter(Boolean);
+
+  const defaultPasswords = [
+    "admin123",
+    "NishaMedia@2026",
+    "Nisha@2026",
+    process.env.ADMIN_PASSWORD
+  ].filter(Boolean);
+
+  const AUTH_CONFIG_FILE = path.join(DATA_DIR, "auth_config.json");
+  if (fs.existsSync(AUTH_CONFIG_FILE)) {
+    try {
+      const savedAuth = JSON.parse(fs.readFileSync(AUTH_CONFIG_FILE, "utf-8"));
+      if (savedAuth.email) defaultEmails.push(savedAuth.email.toLowerCase());
+      if (savedAuth.password) defaultPasswords.push(savedAuth.password);
+    } catch (e) {
+      console.error("Error reading auth_config.json:", e);
+    }
+  }
+
+  const isEmailMatch = defaultEmails.includes(cleanEmail);
+  const isPasswordMatch = defaultPasswords.includes(cleanPassword);
+
+  if (!isEmailMatch || !isPasswordMatch) {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid admin credentials. Please enter the correct email and password."
+    });
+  }
+
   return res.json({
     success: true,
     user: {
       id: "admin-1",
-      name: "Nisha (Studio Lead)",
-      email: email || "admin@nishamedia.com",
+      name: "Studio Administrator",
+      email: cleanEmail,
       role: "admin",
       avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80"
     },
-    token: "demo-jwt-token-nisha-media-cms"
+    token: `auth-token-${Date.now()}`
   });
+});
+
+// Update Admin Credentials API
+app.post("/api/auth/update-credentials", (req, res) => {
+  const { currentPassword, newEmail, newPassword } = req.body;
+  const AUTH_CONFIG_FILE = path.join(DATA_DIR, "auth_config.json");
+
+  const currentAllowed = ["admin123", "NishaMedia@2026", "Nisha@2026", process.env.ADMIN_PASSWORD].filter(Boolean);
+  if (fs.existsSync(AUTH_CONFIG_FILE)) {
+    try {
+      const savedAuth = JSON.parse(fs.readFileSync(AUTH_CONFIG_FILE, "utf-8"));
+      if (savedAuth.password) currentAllowed.push(savedAuth.password);
+    } catch (e) {}
+  }
+
+  if (!currentPassword || !currentAllowed.includes(currentPassword.trim())) {
+    return res.status(401).json({ success: false, message: "Current password does not match." });
+  }
+
+  const newConfig: any = {};
+  if (newEmail && newEmail.trim()) newConfig.email = newEmail.trim().toLowerCase();
+  if (newPassword && newPassword.trim()) newConfig.password = newPassword.trim();
+
+  try {
+    fs.writeFileSync(AUTH_CONFIG_FILE, JSON.stringify(newConfig, null, 2));
+    return res.json({ success: true, message: "Admin credentials updated successfully." });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Failed to save new credentials." });
+  }
 });
 
 // Reset database to sample data endpoint

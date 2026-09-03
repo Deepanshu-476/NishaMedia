@@ -244,6 +244,15 @@ export async function dbGetProjects(fallback: any[]): Promise<any[]> {
       if (list && list.length > 0) {
         // Strip _id from mongo documents or convert to id
         return list.map(({ _id, ...rest }) => rest);
+      } else if (fallback && fallback.length > 0) {
+        // Auto-seed empty MongoDB collection with fallback
+        try {
+          await mongoDb.collection("projects").insertMany(fallback);
+          console.log(`Seeded ${fallback.length} projects into MongoDB`);
+        } catch (seedErr) {
+          console.error("Failed to seed projects to MongoDB:", seedErr);
+        }
+        return fallback;
       }
     } catch (err) {
       console.error("MongoDB getProjects error:", err);
@@ -323,6 +332,18 @@ export async function dbGetSettings(fallback: any): Promise<any> {
       if (doc) {
         const { _id, ...rest } = doc;
         return rest;
+      } else if (fallback) {
+        try {
+          await mongoDb.collection("settings").updateOne(
+            { _id: "site_settings" as any },
+            { $set: { _id: "site_settings" as any, ...fallback, updatedAt: new Date().toISOString() } },
+            { upsert: true }
+          );
+          console.log("Seeded site settings into MongoDB");
+        } catch (seedErr) {
+          console.error("Failed to seed settings to MongoDB:", seedErr);
+        }
+        return fallback;
       }
     } catch (err) {
       console.error("MongoDB getSettings error:", err);

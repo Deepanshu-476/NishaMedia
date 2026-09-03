@@ -63,6 +63,11 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToSite, onPrevie
     }
   };
 
+  const handleLogout = () => {
+    logout();
+    onBackToSite();
+  };
+
   return (
     <div className="min-h-screen bg-neutral-100 dark:bg-neutral-950 text-neutral-900 dark:text-white flex flex-col transition-colors">
       
@@ -118,11 +123,13 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToSite, onPrevie
                 {currentUser?.name || "Admin"}
               </span>
               <button
-                onClick={logout}
-                className="p-1.5 rounded-lg text-neutral-400 hover:text-rose-500 hover:bg-rose-500/10"
-                title="Log out"
+                onClick={handleLogout}
+                id="admin-header-logout-btn"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-neutral-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                title="Log out and return to Home page"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-4 h-4 text-rose-500" />
+                <span className="text-xs font-semibold">Logout</span>
               </button>
             </div>
 
@@ -248,6 +255,21 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToSite, onPrevie
               Atlas
             </span>
           </button>
+
+          {/* Sidebar Logout Action */}
+          <div className="pt-2">
+            <button
+              onClick={handleLogout}
+              id="admin-sidebar-logout-btn"
+              className="w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all cursor-pointer border border-transparent hover:border-rose-200 dark:hover:border-rose-900/50"
+              title="Log out and return to Home page"
+            >
+              <div className="flex items-center gap-2.5">
+                <LogOut className="w-4 h-4" />
+                <span>Logout & Exit to Home</span>
+              </div>
+            </button>
+          </div>
 
           {/* Quick Help Box */}
           <div className="pt-6 hidden md:block">

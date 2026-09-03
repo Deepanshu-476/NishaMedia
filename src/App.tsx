@@ -47,6 +47,14 @@ function MainApp() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace("#", "") as AppPage;
+      if (hash === "admin") {
+        if (!isAuthenticated) {
+          setIsAuthModalOpen(true);
+          setCurrentPage("home");
+          window.location.hash = "home";
+          return;
+        }
+      }
       if (["home", "portfolio", "services", "before-after", "reviews", "about", "contact", "admin"].includes(hash)) {
         setCurrentPage(hash);
       }
@@ -58,10 +66,23 @@ function MainApp() {
 
     window.addEventListener("hashchange", handleHashChange);
     return () => window.removeEventListener("hashchange", handleHashChange);
-  }, []);
+  }, [isAuthenticated]);
+
+  // Guard admin view: If admin logs out or is not authenticated, redirect to Home immediately
+  useEffect(() => {
+    if (currentPage === "admin" && !isAuthenticated) {
+      setCurrentPage("home");
+      window.location.hash = "home";
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [currentPage, isAuthenticated]);
 
   const navigateTo = (page: string) => {
     const targetPage = page as AppPage;
+    if (targetPage === "admin" && !isAuthenticated) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     setCurrentPage(targetPage);
     window.location.hash = targetPage;
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -97,8 +118,8 @@ function MainApp() {
     navigateTo("contact");
   };
 
-  // Render Headless CMS Admin view if active
-  if (currentPage === "admin") {
+  // Render Headless CMS Admin view only if active AND authenticated
+  if (currentPage === "admin" && isAuthenticated) {
     return (
       <AdminLayout
         onBackToSite={() => navigateTo("home")}
@@ -198,7 +219,12 @@ function MainApp() {
       {/* Headless CMS Authentication Modal */}
       <AdminAuthModal
         isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
+        onClose={() => {
+          setIsAuthModalOpen(false);
+          if (currentPage === "admin" && !isAuthenticated) {
+            navigateTo("home");
+          }
+        }}
         onSuccess={handleAuthSuccess}
       />
 
