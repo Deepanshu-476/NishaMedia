@@ -1,7 +1,7 @@
 import path from "path";
 import fs from "fs";
 import express from "express";
-import app from "./server/app.ts";
+import { app } from "./api/index.ts";
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
