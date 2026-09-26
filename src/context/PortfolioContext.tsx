@@ -377,13 +377,16 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     // Standard valid admin credentials
     const validEmails = [
       "admin@nishamedia.com", 
-      "nishamedia01@gmail.com"
+      "nishamedia01@gmail.com",
+      "nishamedia",
+      "admin"
     ];
 
     const validPasswords = [
       "admin123",
       "NishaMedia@2026",
-      "Nisha@2026"
+      "Nisha@2026",
+      "nishamedia"
     ];
 
     // Check for any custom credentials configured by admin

@@ -3,7 +3,6 @@ import cors from "cors";
 import path from "path";
 import fs from "fs";
 import "dotenv/config";
-import { createServer as createViteServer } from "vite";
 import {
   connectToMongoDB,
   getDBStatus,
@@ -35,11 +34,15 @@ app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 // Persistent JSON file storage
-const DATA_DIR = path.join(process.cwd(), "data");
+const DATA_DIR = process.env.VERCEL ? path.join("/tmp", "data") : path.join(process.cwd(), "data");
 const STORAGE_FILE = path.join(DATA_DIR, "storage.json");
 
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+} catch {
+  // Ignore filesystem restriction
 }
 
 // Initial state fallback
@@ -228,9 +231,10 @@ connectToMongoDB().catch((err) => {
 });
 
 // --- REST API Endpoints ---
+const apiRouter = express.Router();
 
 // 1. Health check
-app.get("/api/health", (_req, res) => {
+apiRouter.get("/health", (_req, res) => {
   res.json({ 
     status: "ok", 
     mongoConnected: isMongoActive(),
@@ -239,7 +243,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 // MongoDB Status & Management Endpoints
-app.get("/api/db/status", async (_req, res) => {
+apiRouter.get("/db/status", async (_req, res) => {
   try {
     const status = await getDBStatus(database);
     res.json(status);
@@ -248,7 +252,7 @@ app.get("/api/db/status", async (_req, res) => {
   }
 });
 
-app.post("/api/db/connect", async (req, res) => {
+apiRouter.post("/db/connect", async (req, res) => {
   try {
     const { uri } = req.body;
     if (!uri) {
@@ -267,7 +271,7 @@ app.post("/api/db/connect", async (req, res) => {
   }
 });
 
-app.post("/api/db/sync", async (_req, res) => {
+apiRouter.post("/db/sync", async (_req, res) => {
   try {
     const result = await syncLocalToMongo(database);
     res.json(result);
@@ -277,12 +281,12 @@ app.post("/api/db/sync", async (_req, res) => {
 });
 
 // 2. Settings
-app.get("/api/settings", async (_req, res) => {
+apiRouter.get("/settings", async (_req, res) => {
   const currentSettings = await dbGetSettings(database.settings || DEFAULT_SETTINGS);
   res.json(currentSettings);
 });
 
-app.put("/api/settings", async (req, res) => {
+apiRouter.put("/settings", async (req, res) => {
   database.settings = { ...database.settings, ...req.body };
   saveData(database);
   await dbSaveSettings(database.settings);
@@ -290,7 +294,7 @@ app.put("/api/settings", async (req, res) => {
 });
 
 // 3. Portfolio Projects
-app.get("/api/projects", async (req, res) => {
+apiRouter.get("/projects", async (req, res) => {
   const { category, search, featured } = req.query;
   const allProjects = await dbGetProjects(database.projects || []);
   let list = [...allProjects];
@@ -317,7 +321,7 @@ app.get("/api/projects", async (req, res) => {
   res.json(list);
 });
 
-app.post("/api/projects", async (req, res) => {
+apiRouter.post("/projects", async (req, res) => {
   const newProject = {
     id: `proj-${Date.now()}`,
     createdAt: new Date().toISOString(),
@@ -333,7 +337,7 @@ app.post("/api/projects", async (req, res) => {
   res.status(201).json(newProject);
 });
 
-app.put("/api/projects/:id", async (req, res) => {
+apiRouter.put("/projects/:id", async (req, res) => {
   const { id } = req.params;
   const idx = database.projects.findIndex((p: any) => p.id === id);
   if (idx === -1) {
@@ -345,7 +349,7 @@ app.put("/api/projects/:id", async (req, res) => {
   res.json(database.projects[idx]);
 });
 
-app.delete("/api/projects/:id", async (req, res) => {
+apiRouter.delete("/projects/:id", async (req, res) => {
   const { id } = req.params;
   database.projects = database.projects.filter((p: any) => p.id !== id);
   saveData(database);
@@ -354,12 +358,12 @@ app.delete("/api/projects/:id", async (req, res) => {
 });
 
 // 4. Leads / Inquiries
-app.get("/api/leads", async (_req, res) => {
+apiRouter.get("/leads", async (_req, res) => {
   const leads = await dbGetLeads(database.leads || []);
   res.json(leads);
 });
 
-app.post("/api/leads", async (req, res) => {
+apiRouter.post("/leads", async (req, res) => {
   const newLead = {
     id: `lead-${Date.now()}`,
     date: new Date().toISOString(),
@@ -372,7 +376,7 @@ app.post("/api/leads", async (req, res) => {
   res.status(201).json(newLead);
 });
 
-app.put("/api/leads/:id", async (req, res) => {
+apiRouter.put("/leads/:id", async (req, res) => {
   const { id } = req.params;
   const idx = database.leads.findIndex((l: any) => l.id === id);
   if (idx === -1) {
@@ -384,7 +388,7 @@ app.put("/api/leads/:id", async (req, res) => {
   res.json(database.leads[idx]);
 });
 
-app.delete("/api/leads/:id", async (req, res) => {
+apiRouter.delete("/leads/:id", async (req, res) => {
   const { id } = req.params;
   database.leads = database.leads.filter((l: any) => l.id !== id);
   saveData(database);
@@ -392,9 +396,8 @@ app.delete("/api/leads/:id", async (req, res) => {
   res.json({ success: true, id });
 });
 
-
-// 5. Proper Admin Authentication API
-app.post("/api/auth/login", (req, res) => {
+// 5. Admin Authentication API
+apiRouter.post("/auth/login", (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -411,6 +414,8 @@ app.post("/api/auth/login", (req, res) => {
   const defaultEmails = [
     "admin@nishamedia.com", 
     "nishamedia01@gmail.com", 
+    "nishamedia",
+    "admin",
     (process.env.ADMIN_EMAIL || "").toLowerCase()
   ].filter(Boolean);
 
@@ -418,6 +423,7 @@ app.post("/api/auth/login", (req, res) => {
     "admin123",
     "NishaMedia@2026",
     "Nisha@2026",
+    "nishamedia",
     process.env.ADMIN_PASSWORD
   ].filter(Boolean);
 
@@ -447,7 +453,7 @@ app.post("/api/auth/login", (req, res) => {
     user: {
       id: "admin-1",
       name: "Studio Administrator",
-      email: cleanEmail,
+      email: cleanEmail.includes("@") ? cleanEmail : "nishamedia01@gmail.com",
       role: "admin",
       avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80"
     },
@@ -456,11 +462,11 @@ app.post("/api/auth/login", (req, res) => {
 });
 
 // Update Admin Credentials API
-app.post("/api/auth/update-credentials", (req, res) => {
+apiRouter.post("/auth/update-credentials", (req, res) => {
   const { currentPassword, newEmail, newPassword } = req.body;
   const AUTH_CONFIG_FILE = path.join(DATA_DIR, "auth_config.json");
 
-  const currentAllowed = ["admin123", "NishaMedia@2026", "Nisha@2026", process.env.ADMIN_PASSWORD].filter(Boolean);
+  const currentAllowed = ["admin123", "NishaMedia@2026", "Nisha@2026", "nishamedia", process.env.ADMIN_PASSWORD].filter(Boolean);
   if (fs.existsSync(AUTH_CONFIG_FILE)) {
     try {
       const savedAuth = JSON.parse(fs.readFileSync(AUTH_CONFIG_FILE, "utf-8"));
@@ -485,7 +491,7 @@ app.post("/api/auth/update-credentials", (req, res) => {
 });
 
 // Reset database to sample data endpoint
-app.post("/api/reset-demo-data", (_req, res) => {
+apiRouter.post("/reset-demo-data", (_req, res) => {
   database = {
     settings: DEFAULT_SETTINGS,
     projects: DEFAULT_PROJECTS,
@@ -495,9 +501,17 @@ app.post("/api/reset-demo-data", (_req, res) => {
   res.json({ success: true, message: "Database restored to demo data" });
 });
 
+// Mount router on BOTH /api and root level for seamless hosting compatibility (Render, Vercel, Express)
+app.use("/api", apiRouter);
+app.use(apiRouter);
+
 // --- Server and Vite Integration ---
 async function startServer() {
+  if (process.env.VERCEL) {
+    return;
+  }
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -505,10 +519,12 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (_req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.get("*", (_req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    }
   }
 
   app.listen(PORT, "0.0.0.0", () => {
@@ -516,4 +532,9 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export { app, apiRouter };
+export default app;

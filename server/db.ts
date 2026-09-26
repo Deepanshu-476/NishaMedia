@@ -3,12 +3,18 @@ import fs from "fs";
 import path from "path";
 
 // Configuration & Local fallback
-const DATA_DIR = path.join(process.cwd(), "data");
+const DATA_DIR = process.env.VERCEL 
+  ? path.join("/tmp", "data") 
+  : path.join(process.cwd(), "data");
 const CONFIG_FILE = path.join(DATA_DIR, "db_config.json");
 const STORAGE_FILE = path.join(DATA_DIR, "storage.json");
 
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+} catch {
+  // Ignore filesystem restriction on read-only environments
 }
 
 export interface DBStatus {
@@ -76,6 +82,17 @@ export async function connectToMongoDB(customUri?: string): Promise<{ success: b
     isConnectedToMongo = false;
     lastError = "Please replace '<db_password>' with your actual MongoDB Database User Password in the connection URI.";
     return { success: false, message: lastError };
+  }
+
+  // Reuse existing connection in warm serverless containers
+  if (mongoClient && isConnectedToMongo && mongoDb && !customUri) {
+    try {
+      await mongoDb.command({ ping: 1 });
+      return { success: true, message: "Connected to MongoDB Atlas successfully (warm connection)!" };
+    } catch {
+      // Reconnection needed
+      isConnectedToMongo = false;
+    }
   }
 
   try {
