@@ -6,9 +6,10 @@ interface AdminAuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  authNotice?: string | null;
 }
 
-export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({ isOpen, onClose, onSuccess }) => {
+export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({ isOpen, onClose, onSuccess, authNotice }) => {
   const { login } = usePortfolio();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -73,11 +74,15 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({ isOpen, onClose,
           </p>
         </div>
 
-        {/* Error Alert */}
-        {errorMessage && (
-          <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{errorMessage}</span>
+        {/* Error / Unauthorized Warning Alert */}
+        {(errorMessage || authNotice) && (
+          <div className={`mb-4 p-3 rounded-xl border text-xs font-semibold flex items-start gap-2.5 transition-all ${
+            errorMessage 
+              ? "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400" 
+              : "bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400"
+          }`}>
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="leading-snug">{errorMessage || authNotice}</div>
           </div>
         )}
 

@@ -409,6 +409,9 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (contentType.includes("application/json")) {
         const data = await res.json();
         if (res.ok && data.success && data.user) {
+          try {
+            sessionStorage.setItem("nishamedia_admin_session", JSON.stringify(data.user));
+          } catch {}
           setCurrentUser(data.user);
           return true;
         } else if (!res.ok) {
@@ -442,6 +445,9 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         role: "admin",
         avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80"
       };
+      try {
+        sessionStorage.setItem("nishamedia_admin_session", JSON.stringify(adminUser));
+      } catch {}
       setCurrentUser(adminUser);
       return true;
     }

@@ -38,17 +38,22 @@ function MainApp() {
   const [currentPage, setCurrentPage] = useState<AppPage>("home");
   const [isShowreelOpen, setIsShowreelOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
   
   // Cross-Page Handlers (e.g. pre-filling contact page from services/portfolio)
   const [contactServiceSelected, setContactServiceSelected] = useState<string>("YouTube Video Editing");
   const [contactBudgetSelected, setContactBudgetSelected] = useState<string>("$500 – $1,500");
+
+  const isUserAuthenticated = isAuthenticated || Boolean(sessionStorage.getItem("nishamedia_admin_session"));
 
   // Synchronize hash with current page if user changes hash or URL
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace("#", "") as AppPage;
       if (hash === "admin") {
-        if (!isAuthenticated) {
+        const authed = isAuthenticated || Boolean(sessionStorage.getItem("nishamedia_admin_session"));
+        if (!authed) {
+          setAuthNotice("Access Denied (401 Unauthorized): Admin authentication required to access the CMS Dashboard.");
           setIsAuthModalOpen(true);
           setCurrentPage("home");
           window.location.hash = "home";
@@ -70,16 +75,22 @@ function MainApp() {
 
   // Guard admin view: If admin logs out or is not authenticated, redirect to Home immediately
   useEffect(() => {
-    if (currentPage === "admin" && !isAuthenticated) {
-      setCurrentPage("home");
-      window.location.hash = "home";
-      window.scrollTo({ top: 0, behavior: "smooth" });
+    if (currentPage === "admin") {
+      const authed = isAuthenticated || Boolean(sessionStorage.getItem("nishamedia_admin_session"));
+      if (!authed) {
+        setAuthNotice("Session ended or logged out. Please sign in again.");
+        setCurrentPage("home");
+        window.location.hash = "home";
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     }
   }, [currentPage, isAuthenticated]);
 
-  const navigateTo = (page: string) => {
+  const navigateTo = (page: string, forceAuth = false) => {
     const targetPage = page as AppPage;
-    if (targetPage === "admin" && !isAuthenticated) {
+    const authed = isAuthenticated || Boolean(sessionStorage.getItem("nishamedia_admin_session"));
+    if (targetPage === "admin" && !authed && !forceAuth) {
+      setAuthNotice("Access Denied (401): Admin authentication required to open CMS dashboard.");
       setIsAuthModalOpen(true);
       return;
     }
@@ -89,16 +100,24 @@ function MainApp() {
   };
 
   const handleOpenAdmin = () => {
-    if (isAuthenticated) {
-      navigateTo("admin");
+    const authed = isAuthenticated || Boolean(sessionStorage.getItem("nishamedia_admin_session"));
+    if (authed) {
+      setCurrentPage("admin");
+      window.location.hash = "admin";
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } else {
+      setAuthNotice("Admin Login Required: Please authenticate to access the Studio Management Portal.");
       setIsAuthModalOpen(true);
     }
   };
 
+  // Instant opening on successful login
   const handleAuthSuccess = () => {
+    setAuthNotice(null);
     setIsAuthModalOpen(false);
-    navigateTo("admin");
+    setCurrentPage("admin");
+    window.location.hash = "admin";
+    window.scrollTo({ top: 0, behavior: "instant" });
   };
 
   const handleSelectPackage = (packageName: string, estimatedPrice?: number) => {
@@ -119,15 +138,58 @@ function MainApp() {
   };
 
   // Render Headless CMS Admin view only if active AND authenticated
-  if (currentPage === "admin" && isAuthenticated) {
+  if (currentPage === "admin") {
+    if (isUserAuthenticated) {
+      return (
+        <AdminLayout
+          onBackToSite={() => navigateTo("home")}
+          onPreviewProject={(proj) => {
+            setSelectedProject(proj);
+            navigateTo("portfolio");
+          }}
+        />
+      );
+    }
+    // Unauthorized screen if navigated directly without login
     return (
-      <AdminLayout
-        onBackToSite={() => navigateTo("home")}
-        onPreviewProject={(proj) => {
-          setSelectedProject(proj);
-          navigateTo("portfolio");
-        }}
-      />
+      <div className="min-h-screen bg-neutral-950 text-white flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 flex items-center justify-center mb-5 text-2xl font-black shadow-lg shadow-rose-950/50">
+          !
+        </div>
+        <h1 className="text-2xl sm:text-3xl font-black mb-3 text-white tracking-tight">
+          401 Unauthorized - Access Denied
+        </h1>
+        <p className="text-sm text-neutral-400 max-w-md mb-8 leading-relaxed">
+          Access to the Nisha Media CMS Dashboard is restricted to authenticated studio administrators only. Please sign in to manage your portfolio and inquiries.
+        </p>
+        <div className="flex flex-wrap gap-3 justify-center">
+          <button
+            onClick={() => {
+              setAuthNotice("Please enter admin credentials to access the CMS Dashboard.");
+              setIsAuthModalOpen(true);
+            }}
+            className="px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold text-xs transition-colors shadow-lg shadow-amber-500/20 cursor-pointer"
+          >
+            Sign In to Admin
+          </button>
+          <button
+            onClick={() => navigateTo("home")}
+            className="px-6 py-3 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800 font-bold text-xs transition-colors cursor-pointer"
+          >
+            Back to Public Website
+          </button>
+        </div>
+        <AdminAuthModal
+          isOpen={isAuthModalOpen}
+          authNotice={authNotice}
+          onClose={() => {
+            setIsAuthModalOpen(false);
+            setAuthNotice(null);
+            navigateTo("home");
+          }}
+          onSuccess={handleAuthSuccess}
+        />
+      </div>
     );
   }
 
@@ -219,9 +281,11 @@ function MainApp() {
       {/* Headless CMS Authentication Modal */}
       <AdminAuthModal
         isOpen={isAuthModalOpen}
+        authNotice={authNotice}
         onClose={() => {
           setIsAuthModalOpen(false);
-          if (currentPage === "admin" && !isAuthenticated) {
+          setAuthNotice(null);
+          if (currentPage === "admin" && !isUserAuthenticated) {
             navigateTo("home");
           }
         }}
