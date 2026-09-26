@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { Project, SiteSettings, Lead, User } from "../types";
 import { INITIAL_PROJECTS, INITIAL_SETTINGS, INITIAL_LEADS } from "../data/initialData";
+import { apiUrl } from "../utils/api";
 
 interface PortfolioContextType {
   projects: Project[];
@@ -110,9 +111,9 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     try {
       setIsLoading(true);
       const [projRes, leadsRes, settRes] = await Promise.allSettled([
-        fetch("/api/projects").then((r) => (r.ok && r.headers.get("content-type")?.includes("application/json") ? r.json() : null)),
-        fetch("/api/leads").then((r) => (r.ok && r.headers.get("content-type")?.includes("application/json") ? r.json() : null)),
-        fetch("/api/settings").then((r) => (r.ok && r.headers.get("content-type")?.includes("application/json") ? r.json() : null)),
+        fetch(apiUrl("/api/projects")).then((r) => (r.ok && r.headers.get("content-type")?.includes("application/json") ? r.json() : null)),
+        fetch(apiUrl("/api/leads")).then((r) => (r.ok && r.headers.get("content-type")?.includes("application/json") ? r.json() : null)),
+        fetch(apiUrl("/api/settings")).then((r) => (r.ok && r.headers.get("content-type")?.includes("application/json") ? r.json() : null)),
       ]);
 
       if (projRes.status === "fulfilled" && Array.isArray(projRes.value) && projRes.value.length > 0) {
@@ -193,7 +194,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
 
     try {
-      const res = await fetch("/api/projects", {
+      const res = await fetch(apiUrl("/api/projects"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newProj),
@@ -230,7 +231,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
 
     try {
-      await fetch(`/api/projects/${id}`, {
+      await fetch(apiUrl(`/api/projects/${id}`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
@@ -256,7 +257,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
 
     try {
-      await fetch(`/api/projects/${id}`, {
+      await fetch(apiUrl(`/api/projects/${id}`), {
         method: "DELETE",
       });
     } catch (err) {
@@ -284,7 +285,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
 
     try {
-      const res = await fetch("/api/leads", {
+      const res = await fetch(apiUrl("/api/leads"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newLead),
@@ -312,7 +313,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
 
     try {
-      await fetch(`/api/leads/${id}`, {
+      await fetch(apiUrl(`/api/leads/${id}`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
@@ -335,7 +336,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
 
     try {
-      await fetch(`/api/leads/${id}`, {
+      await fetch(apiUrl(`/api/leads/${id}`), {
         method: "DELETE",
       });
     } catch (err) {
@@ -354,7 +355,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
 
     try {
-      await fetch("/api/settings", {
+      await fetch(apiUrl("/api/settings"), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
@@ -396,7 +397,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
 
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch(apiUrl("/api/auth/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: cleanEmail, password: cleanPassword }),
@@ -474,7 +475,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
 
     try {
-      await fetch("/api/reset-demo-data", { method: "POST" });
+      await fetch(apiUrl("/api/reset-demo-data"), { method: "POST" });
     } catch (err) {
       console.warn("Reset endpoint error:", err);
     }

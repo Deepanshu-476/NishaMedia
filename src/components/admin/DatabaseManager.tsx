@@ -17,9 +17,15 @@ import {
   HelpCircle,
   Clock,
   Eye,
-  EyeOff
+  EyeOff,
+  Cloud,
+  Terminal,
+  Radio,
+  Wifi,
+  WifiOff
 } from "lucide-react";
 import { usePortfolio } from "../../context/PortfolioContext";
+import { apiUrl, getBackendUrl, setBackendUrl } from "../../utils/api";
 
 interface DBStatus {
   connected: boolean;
@@ -51,11 +57,21 @@ export const DatabaseManager: React.FC = () => {
   const [actionMessage, setActionMessage] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
+  // Render / Cloud Backend Connection State
+  const [backendUrlInput, setBackendUrlInput] = useState<string>(() => getBackendUrl());
+  const [isTestingBackend, setIsTestingBackend] = useState(false);
+  const [backendTestResult, setBackendTestResult] = useState<{
+    ok: boolean;
+    message: string;
+    mongoConnected?: boolean;
+    timestamp?: string;
+  } | null>(null);
+
   const fetchStatus = async () => {
     try {
       setIsLoadingStatus(true);
-      const res = await fetch("/api/db/status");
-      if (res.ok) {
+      const res = await fetch(apiUrl("/api/db/status"));
+      if (res.ok && res.headers.get("content-type")?.includes("application/json")) {
         const data: DBStatus = await res.json();
         setDbStatus(data);
       }
@@ -108,14 +124,14 @@ export const DatabaseManager: React.FC = () => {
     try {
       setIsConnecting(true);
       setActionMessage(null);
-      const res = await fetch("/api/db/connect", {
+      const res = await fetch(apiUrl("/api/db/connect"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ uri })
       });
       const contentType = res.headers.get("content-type") || "";
       if (!contentType.includes("application/json")) {
-        throw new Error("Backend server API route not found on this host. If hosting statically, please connect the Node.js backend.");
+        throw new Error("Backend server API route not found on this host. If hosting statically, please connect the Node.js backend on Render.");
       }
       const data = await res.json();
 
@@ -146,10 +162,10 @@ export const DatabaseManager: React.FC = () => {
     try {
       setIsSyncing(true);
       setActionMessage(null);
-      const res = await fetch("/api/db/sync", { method: "POST" });
+      const res = await fetch(apiUrl("/api/db/sync"), { method: "POST" });
       const contentType = res.headers.get("content-type") || "";
       if (!contentType.includes("application/json")) {
-        throw new Error("Backend server API route not found on this host.");
+        throw new Error("Backend server API route not found on this host. Please verify your Render backend is running.");
       }
       const data = await res.json();
       if (data.success) {
@@ -166,6 +182,58 @@ export const DatabaseManager: React.FC = () => {
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  // Test Render / Cloud Backend Health
+  const handleTestBackend = async (urlToTest?: string) => {
+    const rawTarget = urlToTest !== undefined ? urlToTest : backendUrlInput;
+    const cleanTarget = rawTarget.trim().replace(/\/+$/, "");
+    setIsTestingBackend(true);
+    setBackendTestResult(null);
+
+    try {
+      const endpoint = cleanTarget ? `${cleanTarget}/api/health` : "/api/health";
+      const startTime = Date.now();
+      const res = await fetch(endpoint, { method: "GET" });
+      const duration = Date.now() - startTime;
+      const contentType = res.headers.get("content-type") || "";
+
+      if (res.ok && contentType.includes("application/json")) {
+        const data = await res.json();
+        setBackendTestResult({
+          ok: true,
+          message: `Backend is Online and Responding! (Latency: ${duration}ms)`,
+          mongoConnected: data.mongoConnected,
+          timestamp: data.timestamp
+        });
+      } else {
+        setBackendTestResult({
+          ok: false,
+          message: `Server returned HTTP ${res.status}. If Render free tier was sleeping, it may take 30-50s to spin up.`
+        });
+      }
+    } catch (err: any) {
+      setBackendTestResult({
+        ok: false,
+        message: `Could not reach server: ${err.message || "Network Error"}. Check the URL and verify CORS is allowed.`
+      });
+    } finally {
+      setIsTestingBackend(false);
+    }
+  };
+
+  // Save Backend URL to localStorage and reload context
+  const handleSaveBackendUrl = async () => {
+    const cleanUrl = backendUrlInput.trim().replace(/\/+$/, "");
+    setBackendUrl(cleanUrl);
+    setActionMessage({
+      text: cleanUrl 
+        ? `Backend URL successfully saved: ${cleanUrl}. Frontend will now route all API requests to Render!`
+        : "Backend URL set to default (same-origin relative paths).",
+      type: "success"
+    });
+    await fetchStatus();
+    await refreshData();
   };
 
   return (
@@ -217,6 +285,179 @@ export const DatabaseManager: React.FC = () => {
           <div className="flex-1">{actionMessage.text}</div>
         </div>
       )}
+
+      {/* SECTION 0: RENDER CLOUD BACKEND INTEGRATION */}
+      <div className="p-6 sm:p-7 rounded-3xl border border-blue-500/20 bg-gradient-to-br from-blue-500/5 via-transparent to-purple-500/5 dark:bg-neutral-900 shadow-sm space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-neutral-200 dark:border-neutral-800">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
+              <Cloud className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-extrabold text-neutral-900 dark:text-white flex items-center gap-2">
+                <span>Render.com Cloud Backend (API Server)</span>
+                {backendUrlInput ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 text-[11px] font-bold">
+                    <Radio className="w-2.5 h-2.5 animate-pulse text-blue-500" />
+                    CUSTOM CLOUD API
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-neutral-500/15 text-neutral-600 dark:text-neutral-400 text-[11px] font-bold">
+                    SAME-ORIGIN DEFAULT
+                  </span>
+                )}
+              </h3>
+              <p className="text-xs text-neutral-500 mt-0.5">
+                Connect your live Render Node.js backend URL (e.g. <code className="font-mono text-blue-600 dark:text-blue-400">https://nishamedia-backend.onrender.com</code>) so static hosting on <code className="font-mono text-neutral-700 dark:text-neutral-300">nishamediaco.com</code> never gets 404 API errors.
+              </p>
+            </div>
+          </div>
+
+          <a
+            href="https://dashboard.render.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors self-start sm:self-center"
+          >
+            <span>Open Render Dashboard</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
+
+        {/* Backend URL Input & Actions */}
+        <div className="space-y-3">
+          <label className="text-xs font-bold text-neutral-700 dark:text-neutral-300 flex items-center justify-between">
+            <span>Render Web Service URL</span>
+            {backendUrlInput && (
+              <span className="text-[11px] text-neutral-500 font-mono">
+                Current: {backendUrlInput}
+              </span>
+            )}
+          </label>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <input
+              type="url"
+              value={backendUrlInput}
+              onChange={(e) => setBackendUrlInput(e.target.value)}
+              placeholder="https://nishamedia-backend.onrender.com"
+              className="flex-1 px-4 py-2.5 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-xs font-mono text-neutral-900 dark:text-white placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleTestBackend()}
+                disabled={isTestingBackend}
+                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-neutral-200 dark:bg-neutral-800 hover:bg-neutral-300 dark:hover:bg-neutral-700 text-neutral-900 dark:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+              >
+                <Radio className={`w-3.5 h-3.5 ${isTestingBackend ? "animate-spin text-blue-500" : ""}`} />
+                <span>{isTestingBackend ? "Pinging..." : "Test Connection"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveBackendUrl}
+                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Save & Connect</span>
+              </button>
+              {backendUrlInput && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBackendUrlInput("");
+                    setBackendUrl("");
+                    setActionMessage({ text: "Backend URL reset to same-origin default.", type: "info" });
+                    fetchStatus();
+                    refreshData();
+                  }}
+                  className="px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-xs font-medium text-neutral-600 dark:text-neutral-400 transition-colors"
+                  title="Reset to default relative paths"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Test Health Result */}
+          {backendTestResult && (
+            <div className={`p-3.5 rounded-xl text-xs flex items-start gap-2.5 border ${
+              backendTestResult.ok 
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300"
+                : "bg-rose-500/10 border-rose-500/30 text-rose-800 dark:text-rose-300"
+            }`}>
+              {backendTestResult.ok ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+              )}
+              <div className="flex-1 space-y-1">
+                <p className="font-semibold">{backendTestResult.message}</p>
+                {backendTestResult.ok && (
+                  <div className="flex flex-wrap items-center gap-3 text-[11px] opacity-80 font-mono">
+                    <span>MongoDB Atlas Status: {backendTestResult.mongoConnected ? "Connected" : "Disconnected (Add MONGODB_URI)"}</span>
+                    <span>•</span>
+                    <span>Server Time: {backendTestResult.timestamp}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Step-by-Step Render Quick Reference */}
+        <div className="p-4 rounded-2xl bg-neutral-100 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-800 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5">
+              <Terminal className="w-3.5 h-3.5 text-blue-500" />
+              <span>Render Web Service Quick Setup Settings</span>
+            </span>
+            <span className="text-[11px] text-neutral-500">Free Tier Friendly</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div className="p-3 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700/60 space-y-1">
+              <span className="text-[11px] text-neutral-500 font-medium">Build Command:</span>
+              <div className="flex items-center justify-between font-mono text-[11px] bg-neutral-100 dark:bg-neutral-800 p-1.5 rounded-lg text-blue-600 dark:text-blue-400">
+                <code>npm install &amp;&amp; npm run build</code>
+                <button
+                  type="button"
+                  onClick={() => handleCopy("npm install && npm run build", "buildCommand")}
+                  className="hover:text-white ml-2 text-neutral-500"
+                >
+                  {copiedField === "buildCommand" ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700/60 space-y-1">
+              <span className="text-[11px] text-neutral-500 font-medium">Start Command:</span>
+              <div className="flex items-center justify-between font-mono text-[11px] bg-neutral-100 dark:bg-neutral-800 p-1.5 rounded-lg text-emerald-600 dark:text-emerald-400">
+                <code>npm start</code>
+                <button
+                  type="button"
+                  onClick={() => handleCopy("npm start", "startCommand")}
+                  className="hover:text-white ml-2 text-neutral-500"
+                >
+                  {copiedField === "startCommand" ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700/60 space-y-2">
+            <span className="text-[11px] text-neutral-500 font-medium">Required Environment Variables on Render:</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono">
+              <div className="p-2 rounded bg-neutral-100 dark:bg-neutral-800 flex items-center justify-between">
+                <span>NODE_ENV = <strong>production</strong></span>
+              </div>
+              <div className="p-2 rounded bg-neutral-100 dark:bg-neutral-800 flex items-center justify-between">
+                <span>MONGODB_URI = <strong>(Atlas String)</strong></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* SECTION 1: MONGODB ATLAS INTEGRATION */}
       <div className="p-6 sm:p-7 rounded-3xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-sm space-y-6">
