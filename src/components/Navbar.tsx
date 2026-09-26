@@ -78,7 +78,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <img 
                   src={logoUrl} 
                   alt={studioTitle}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain p-0.5"
                   referrerPolicy="no-referrer"
                   onError={(e) => {
                     // Fallback to icon on error
@@ -143,13 +143,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={toggleTheme}
             id="theme-toggle-btn"
             aria-label="Toggle theme"
-            className="p-2 rounded-xl text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+            className="p-2 sm:px-2.5 rounded-xl text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors border border-neutral-200/50 dark:border-neutral-800/80 flex items-center gap-1.5"
             title={`Switch to ${theme === "dark" ? "Light" : "Dark"} mode`}
           >
             {theme === "dark" ? (
-              <Sun className="w-5 h-5 text-amber-400" />
+              <>
+                <Sun className="w-5 h-5 text-amber-400 transition-transform duration-300 hover:rotate-45" />
+                <span className="hidden xl:inline text-xs font-semibold text-neutral-400">Light</span>
+              </>
             ) : (
-              <Moon className="w-5 h-5 text-neutral-700" />
+              <>
+                <Moon className="w-5 h-5 text-indigo-600 transition-transform duration-300 hover:-rotate-12" />
+                <span className="hidden xl:inline text-xs font-semibold text-neutral-600">Dark</span>
+              </>
             )}
           </button>
 
@@ -199,6 +205,20 @@ export const Navbar: React.FC<NavbarProps> = ({
           })}
 
           <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 flex flex-col gap-2">
+            {/* Mobile Theme Toggle Button */}
+            <button
+              onClick={toggleTheme}
+              className="w-full py-2.5 px-4 rounded-xl text-xs font-bold border border-neutral-200 dark:border-neutral-800 bg-neutral-100/70 dark:bg-neutral-900/80 text-neutral-800 dark:text-neutral-200 flex items-center justify-between transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                {theme === "dark" ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
+                <span>Appearance Mode</span>
+              </span>
+              <span className="text-[11px] px-2 py-0.5 rounded-md font-semibold uppercase bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                {theme === "dark" ? "Dark Mode 🌙" : "Light Mode ☀️"}
+              </span>
+            </button>
+
             {showWhatsapp && (
               <a
                 href={`https://wa.me/${settings.whatsapp.replace(/[^0-9]/g, "")}`}

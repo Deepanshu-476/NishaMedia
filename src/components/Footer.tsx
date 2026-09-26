@@ -44,7 +44,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenAdmin }) => {
                   <img
                     src={settings.header.logoUrl}
                     alt={settings.studioName || "Logo"}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain p-0.5"
                     referrerPolicy="no-referrer"
                     onError={(e) => {
                       (e.target as HTMLElement).style.display = "none";
